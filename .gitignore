@@ -1,0 +1,39 @@
+node_modules/
+dist/
+build/
+coverage/
+legacy/
+*.db
+.env
+.env.local
+.env.*.local
+!.env.example
+.DS_Store
+*.log
+# BEADS runtime
+.beads/beads.db
+.beads/daemon.lock
+.beads/daemon.pid
+.beads/daemon.log
+.beads/temp/
+# BEADS execution state (working files for context recovery)
+.beads/context/
+.beads/plans/
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.out
+coverage.html
+/vtiger-asterisk-connector
+/bin/vtiger-asterisk-connector
+vendor/
+go.work
+go.work.sum
+# IDE
+.idea/
+*.iml

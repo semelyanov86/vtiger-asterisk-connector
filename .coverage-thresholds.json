@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$comment": "Coverage thresholds for orchestrator agents and CI. Portable across projects \u2014 adjust values per-repo.",
+  "thresholds": {
+    "lines": 80,
+    "branches": 80,
+    "functions": 80,
+    "statements": 80
+  },
+  "enforcement": {
+    "command": "bash bin/coverage-check.sh",
+    "blockPRCreation": true,
+    "blockTaskCompletion": true,
+    "description": "Orchestrator agents MUST check coverage against these thresholds before marking any task complete or creating a PR. bin/coverage-check.sh reads the `lines` threshold from this file, runs `go test -coverprofile -covermode=atomic ./...`, and exits non-zero if total coverage is below it. If coverage drops below the threshold, the task fails."
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "metaswarm_version": "0.12.0",
+  "distribution": "plugin",
+  "installed_at": "2026-08-19T17:00:18Z",
+  "updated_at": "2026-08-19T17:00:18Z",
+  "detection": {
+    "language": "Go",
+    "go_version": "1.26",
+    "framework": null,
+    "test_runner": "go test",
+    "linter": "golangci-lint",
+    "formatter": "gofmt",
+    "package_manager": null,
+    "type_checker": "go vet",
+    "ci": "GitHub Actions",
+    "git_hooks": null
+  },
+  "choices": {
+    "coverage_threshold": 80,
+    "external_tools": true,
+    "visual_review": false,
+    "ci_pipeline": true,
+    "git_hooks": false
+  },
+  "commands": {
+    "test": "go test ./...",
+    "test_race": "go test -race ./...",
+    "coverage": "bash bin/coverage-check.sh",
+    "lint": "golangci-lint run",
+    "typecheck": "go vet ./...",
+    "format_check": "gofmt -l .",
+    "build": "go build ./..."
+  }
+}
