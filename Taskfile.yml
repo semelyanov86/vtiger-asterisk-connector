@@ -1,0 +1,116 @@
+version: '3'
+
+vars:
+  GO_PACKAGES: ./...
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  ssh:
+    desc: Connect to the target server over SSH
+    cmds:
+      - ssh root@cm.gus-global.com
+    interactive: true
+
+  run:
+    desc: Run the connector locally
+    cmds:
+      - go run .
+
+  build:
+    desc: Build all Go packages
+    cmds:
+      - go build {{.GO_PACKAGES}}
+
+  generate:
+    desc: Run Go code generators
+    cmds:
+      - go generate {{.GO_PACKAGES}}
+
+  deps:
+    desc: Download and verify Go module dependencies
+    cmds:
+      - go mod download
+      - go mod verify
+
+  tidy:
+    desc: Synchronize go.mod and go.sum
+    cmds:
+      - go mod tidy
+
+  tidy:check:
+    desc: Check that go.mod and go.sum are tidy without changing them
+    cmds:
+      - go mod tidy -diff
+
+  fmt:
+    desc: Format Go source files
+    cmds:
+      - golangci-lint fmt {{.GO_PACKAGES}}
+
+  fmt:check:
+    desc: Check Go formatting without changing files
+    cmds:
+      - |
+        set -eu
+        diff="$(golangci-lint fmt --diff --color=never {{.GO_PACKAGES}})"
+        if [ -n "$diff" ]; then
+          printf '%s\n' "$diff"
+          exit 1
+        fi
+
+  vet:
+    desc: Run Go static analysis
+    cmds:
+      - go vet {{.GO_PACKAGES}}
+
+  lint:
+    desc: Run configured golangci-lint checks
+    cmds:
+      - golangci-lint run {{.GO_PACKAGES}}
+
+  lint:fix:
+    desc: Apply safe automatic linter fixes
+    cmds:
+      - golangci-lint run --fix {{.GO_PACKAGES}}
+
+  test:
+    desc: Run unit tests in randomized order
+    cmds:
+      - go test -shuffle=on {{.GO_PACKAGES}}
+
+  test:race:
+    desc: Run unit tests with the race detector
+    cmds:
+      - go test -race -shuffle=on {{.GO_PACKAGES}}
+
+  test:integration:
+    desc: Run uncached integration tests with the race detector
+    cmds:
+      - go test -race -tags=integration -count=1 -shuffle=on {{.GO_PACKAGES}}
+
+  coverage:
+    desc: Run tests and enforce the configured coverage threshold
+    cmds:
+      - bash bin/coverage-check.sh
+
+  vuln:
+    desc: Check reachable dependencies for known vulnerabilities
+    cmds:
+      - govulncheck {{.GO_PACKAGES}}
+
+  check:
+    desc: Run the local CI quality gate
+    cmds:
+      - task: fmt:check
+      - task: tidy:check
+      - task: vet
+      - task: lint
+      - task: build
+      - task: test:race
+      - task: vuln
+      - task: coverage

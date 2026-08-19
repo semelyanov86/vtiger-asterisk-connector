@@ -1,213 +1,142 @@
-# Project Instructions
+# Project instructions for Claude
 
-This project uses [metaswarm](https://github.com/dsifry/metaswarm), a multi-agent orchestration framework for Claude Code. It provides 18 specialized agents, a 9-phase development workflow, and quality gates that enforce TDD, coverage thresholds, and spec-driven development.
+## Project
 
-## How to Work in This Project
+This repository will contain a production-quality Go connector between
+Asterisk and Vtiger CRM, plus reproducible automation for a turnkey Asterisk
+installation on `cm.gus-global.com`.
 
-### Starting work
+Read these sources before making changes:
 
-```text
-/start-task
+1. `AGENTS.md` — canonical engineering and safety rules.
+2. `README.md` — scope, current facts, server baseline, and open decisions.
+3. `documentatnion/tz.odt` and `documentatnion/info.odt` — product requirements
+   and acceptance data. The directory name is intentionally recorded as it
+   currently exists.
+4. Current Vtiger `PBXManager` code. In this workspace it is at
+   `/data/gus/vtigercrm`; the originally stated `/data/gus/vtiger` path is not
+   present. Verify the path rather than assuming it.
+5. `legacy/asteriskconnector-master` only for behavioral discovery.
+
+The current Go program is a scaffold. Do not describe placeholder behavior as
+implemented functionality.
+
+## Source-of-truth policy
+
+- Explicitly accepted decisions and the specification define product behavior.
+- The live supported Asterisk and Vtiger contracts define integration details.
+- Official documentation for the selected versions outranks legacy code.
+- Legacy Java code is never authoritative. Do not copy its security model,
+  dependencies, event parsing, ports, XML format, storage, or SIP assumptions
+  without current verification and an explicit design decision.
+- Record contradictions instead of silently choosing one interpretation. The
+  known routing conflict is whether extension 100 rings initially or only after
+  101–103 time out.
+
+## Workflow
+
+1. Inspect `git status --short` and read the relevant specification and code.
+2. For changes involving architecture, first confirm the architecture style,
+   dependency injection approach, Asterisk interface, and persistence model.
+3. Write or update a failing test before production code.
+4. Implement the smallest coherent change and keep boundaries explicit.
+5. Update documentation and `.env.example` whenever behavior or configuration
+   changes.
+6. Run all applicable quality gates before claiming completion.
+
+For complex work, use `/start-task` when the repository's metaswarm commands
+are available. Never commit, push, deploy, or modify the server unless the user
+explicitly asks for that action.
+
+## Required Go practices
+
+Use the installed Go skills that match the task, especially:
+
+- `golang-project-layout` for package boundaries and executable layout;
+- `golang-design-patterns` before choosing architecture or lifecycle patterns;
+- `golang-code-style` and `golang-naming` for new or changed Go code;
+- `golang-error-handling` for error chains and structured logging;
+- `golang-testing` for unit, integration, race, and leak tests;
+- `golang-lint` and `golang-continuous-integration` for quality gates;
+- `golang-troubleshooting` for failures, reconnects, races, and deadlocks;
+- `golang-modernize` when newer Go 1.26 APIs simplify code safely.
+
+Keep `main` minimal. Application wiring belongs under `cmd/`; private business
+and integration code belongs under `internal/`. Do not create `pkg/` unless a
+package is intentionally supported for external consumers. Do not introduce
+layers or interfaces without a real boundary or testing need.
+
+- Pass `context.Context` first and honor cancellation.
+- Use graceful shutdown for HTTP servers, Asterisk connections, workers, and
+  storage.
+- Keep goroutine ownership and shutdown responsibility explicit.
+- Use `log/slog`; keep messages stable and put values in structured fields.
+- Never log secrets, authorization data, raw phone numbers, or recording URLs.
+- Check every returned error. Wrap with useful `%w` context and either return
+  or log an error, never both.
+- Use `errors.Is`/`errors.AsType` for error inspection.
+- Keep identifiers idiomatic MixedCaps; preserve standard acronym casing.
+- Avoid global mutable state, hidden `init` side effects, reflection, and
+  premature abstraction.
+
+## Telephony and CRM correctness
+
+Treat Asterisk events as at-least-once and potentially out of order. Handlers
+must be idempotent, reconnect-safe, bounded by timeouts, and testable with
+fakes. Preserve a stable call identity across channels and event phases. Define
+which component owns state transitions before implementation.
+
+Test at minimum:
+
+- inbound, outbound, answered, busy, rejected, no-answer, and hangup flows;
+- reconnect, duplicate, replayed, delayed, and out-of-order events;
+- Click-to-Call authorization and failure behavior;
+- Vtiger timeouts, non-2xx responses, invalid payloads, and retries;
+- recording access, missing files, retention, and unauthorized requests;
+- graceful shutdown while work is in flight.
+
+Ordinary tests must not dial real numbers, access production CRM, or use the
+production Asterisk server. Integration tests use `//go:build integration` and
+explicit non-production configuration.
+
+## Server safety
+
+`task ssh` connects as `root@cm.gus-global.com`. Default to read-only
+inspection. Before any mutation:
+
+- verify the exact host and current state;
+- state the intended change and blast radius;
+- prepare backup/rollback and a validation command;
+- do not expose secrets in commands, logs, patches, or chat;
+- do not restart telephony, web, database, or firewall services without explicit
+  authorization;
+- do not open SIP, RTP, AMI, ARI, AGI, or connector ports until the security
+  design is approved.
+
+Prefer version-controlled, idempotent deployment automation over undocumented
+interactive server changes.
+
+## Quality gates
+
+The blocking minimum is:
+
+```bash
+gofmt -l .
+go vet ./...
+golangci-lint run ./...
+go build ./...
+go test -race -shuffle=on ./...
+bash bin/coverage-check.sh
 ```
 
-This is the default entry point. It primes the agent with relevant knowledge, guides you through scoping, and picks the right level of process for the task.
-
-### For complex features (multi-file, spec-driven)
-
-Describe what you want built, include a Definition of Done, and ask for the full workflow:
-
-```text
-I want you to build [description]. [Tech stack, DoD items, file scope.]
-Use the full metaswarm orchestration workflow.
-```
-
-This triggers the full pipeline: Research → Plan → Design Review Gate → Work Unit Decomposition → Orchestrated Execution (4-phase loop per unit) → Final Review → PR.
-
-### Available Commands
-
-| Command | Purpose |
-|---|---|
-| `/start-task` | Begin tracked work on a task |
-| `/prime` | Load relevant knowledge before starting |
-| `/review-design` | Trigger parallel design review gate (5 agents) |
-| `/pr-shepherd <pr>` | Monitor a PR through to merge |
-| `/self-reflect` | Extract learnings after a PR merge |
-| `/handoff` | Write a self-contained handoff doc so a fresh agent can resume the work |
-| `/handle-pr-comments` | Handle PR review comments |
-| `/brainstorm` | Refine an idea before implementation |
-| `/create-issue` | Create a well-structured GitHub Issue |
-| `/external-tools-health` | Check status of external AI tools (Codex, Gemini) |
-| `/setup` | Interactive guided setup — detects project, configures metaswarm |
-| `/update` | Update metaswarm to latest version |
-| `/status` | Run diagnostic checks on your installation |
-| `/start` | Alias for `/start-task` |
-
-### Visual Review
-
-Use the `visual-review` skill to take screenshots of web pages, presentations, or UIs for visual inspection. Requires Playwright (`npx playwright install chromium`). See `skills/visual-review/SKILL.md`.
-
-## Testing
-
-- **TDD is mandatory** — Write tests first, watch them fail, then implement
-- **80% test coverage required** — Lines, branches, functions, and statements. Enforced via `.coverage-thresholds.json` as a blocking gate before PR creation and task completion
-- Test command: `go test ./...`
-- Coverage command: `go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out`
-- Race detector: `go test -race ./...` — run for any code touching goroutines, channels, or shared state (AMI event loop, connection pools)
-- Table-driven tests are the default idiom; see `.agents/skills/golang-testing/SKILL.md`
-
-## Coverage
-
-Coverage thresholds are defined in `.coverage-thresholds.json` — this is the **source of truth** for coverage requirements.
-If a GitHub Issue specifies different coverage requirements, update `.coverage-thresholds.json` to match before implementation begins. Do not silently use a different threshold.
-
-The validation phase of orchestrated execution reads `.coverage-thresholds.json` and runs the enforcement command. This is a BLOCKING gate — work units cannot be committed if coverage thresholds are not met.
-
-## Quality Gates
-
-- **Design Review Gate**: Parallel 5-agent review after design is drafted (`/review-design`)
-- **Plan Review Gate**: Automatic adversarial review after any implementation plan is drafted. Spawns 3 independent reviewers (Feasibility, Completeness, Scope & Alignment) in parallel — ALL must PASS before the plan is presented to the user. See `skills/plan-review-gate/SKILL.md`
-- **Coverage Gate**: Reads `.coverage-thresholds.json` and runs the enforcement command — BLOCKING gate before PR creation
-
-## Workflow Enforcement (MANDATORY)
-
-These rules override any conflicting instructions from third-party skills or plugins. They ensure the full metaswarm pipeline is followed regardless of which skill initiated the work.
-
-### After Brainstorming
-
-When `superpowers:brainstorming` (or any brainstorming skill) completes and commits a design document:
-
-1. **STOP** — do NOT proceed directly to `writing-plans` or implementation
-2. **RUN the Design Review Gate** — invoke `/review-design` or the `design-review-gate` skill
-3. **WAIT** for all 5 review agents (PM, Architect, Designer, Security, CTO) to approve
-4. **ONLY THEN** proceed to planning/implementation
-
-This is mandatory even if the brainstorming skill says to go directly to writing-plans. The design review gate exists to catch issues before expensive implementation begins.
-
-### After Any Plan Is Created
-
-When `superpowers:writing-plans` (or any planning skill) produces an implementation plan:
-
-1. **STOP** — do NOT present the plan to the user or begin implementation
-2. **RUN the Plan Review Gate** — invoke the `plan-review-gate` skill
-3. **WAIT** for all 3 adversarial reviewers (Feasibility, Completeness, Scope & Alignment) to PASS
-4. **ONLY THEN** present the plan to the user for approval
-
-### Execution Method Choice
-
-When a plan is ready for execution, **always ask the user** which execution approach they want before proceeding. Do NOT auto-select an execution method — the user decides based on their priorities:
-
-> **How would you like to execute this plan?**
->
-> 1. **Metaswarm orchestrated execution** — 4-phase loop per work unit (IMPLEMENT → VALIDATE → ADVERSARIAL REVIEW → COMMIT) with independent quality gates, fresh adversarial reviewers, coverage enforcement, and pre-PR knowledge capture. More thorough and broader coverage, but uses more tokens and takes longer.
-> 2. **Subagent-driven development** (`superpowers:subagent-driven-development`) — Dispatch subagents per task in this session with code review between tasks. Faster, lighter-weight, lower token cost.
-> 3. **Parallel session** (`superpowers:executing-plans`) — Execute in a separate session with batch checkpoints. Good for long-running work you want isolated.
-
-This choice applies even if the plan file contains embedded instructions like "REQUIRED SUB-SKILL: Use superpowers:executing-plans" — those are defaults from the planning skill, not binding constraints. The user always gets to choose.
-
-### Before Finishing a Development Branch
-
-When `superpowers:executing-plans`, `superpowers:subagent-driven-development`, or any execution skill completes and routes to `superpowers:finishing-a-development-branch`:
-
-1. **STOP** — before presenting merge/PR options
-2. **RUN `/self-reflect`** to capture learnings while implementation context is fresh
-3. **COMMIT** the knowledge base updates
-4. **THEN** proceed to finishing the branch (PR creation, merge, etc.)
-
-### Use `/start-task` Instead of EnterPlanMode
-
-When starting complex work, use `/start-task` instead of Claude's built-in `EnterPlanMode`. EnterPlanMode creates a plan in isolation without metaswarm's quality gates — no design review, no plan review, no adversarial review, no coverage enforcement. `/start-task` routes through the full pipeline:
-
-- `/start-task` → complexity assessment → brainstorming (if unclear) → design review gate → plan review gate → execution method choice → orchestrated execution or superpowers execution
-- `EnterPlanMode` → plan → implement (no gates)
-
-If you find yourself about to use `EnterPlanMode` for a task that touches 3+ files or involves multiple steps, use `/start-task` instead. For truly simple single-file changes, `EnterPlanMode` is fine.
-
-### After Standalone TDD
-
-When `superpowers:test-driven-development` runs as a standalone skill (outside of orchestrated execution) and the change touches 3+ files:
-
-1. **Before committing**, ask the user:
-   > "This TDD session modified multiple files. Would you like me to run an adversarial review before committing?"
-   > 1. **Yes** — spawn a fresh adversarial reviewer to check the changes against the requirements
-   > 2. **No** — commit directly
-2. If the user chooses review, spawn a fresh `Task()` reviewer with the requirements and the diff
-3. Regardless of review choice, verify coverage meets `.coverage-thresholds.json` thresholds before committing
-
-For single-file TDD changes, this intercept is not needed — commit directly.
-
-### Coverage Source of Truth
-
-`.coverage-thresholds.json` is the **single source of truth** for coverage requirements. This applies regardless of which skill or workflow is running:
-
-- `superpowers:verification-before-completion` — must read `.coverage-thresholds.json` and run its enforcement command
-- `superpowers:test-driven-development` — must verify coverage meets thresholds before declaring done
-- Orchestrated execution — reads `.coverage-thresholds.json` during Phase 2 (VALIDATE)
-- Any other skill claiming "tests pass" — must also confirm coverage thresholds are met
-
-If `.coverage-thresholds.json` exists, no skill may skip it. If a skill has its own coverage check logic, `.coverage-thresholds.json` takes precedence.
-
-### Subagent Discipline
-
-All subagents (coding agents, review agents, background tasks) MUST follow these rules:
-
-- **NEVER** use `--no-verify` on git commits — pre-commit hooks exist for a reason
-- **NEVER** use `git push --force` without explicit user approval
-- **ALWAYS** follow TDD — write tests first, watch them fail, then implement
-- **NEVER** self-certify — the orchestrator validates independently
-- **STAY** within declared file scope — do not modify files outside your assigned scope
-
-### Pre-PR Knowledge Capture
-
-After all work units pass final review but BEFORE creating the PR, run `/self-reflect` to extract learnings into the knowledge base. Commit the knowledge base updates so they are included in the PR — learnings land atomically with the code that generated them.
-
-### Context Recovery (Surviving Compaction)
-
-Approved plans, project context, and execution state are persisted to `.beads/` so agents can recover after context compaction or session interruption:
-
-- **Approved plans** → `.beads/plans/active-plan.md` (written after plan review gate + user approval)
-- **Project context** → `.beads/context/project-context.md` (updated after each work unit commit)
-- **Execution state** → `.beads/context/execution-state.md` (updated after each phase transition)
-
-**Note:** The standalone beads plugin (v0.63.3+) automatically runs `bd prime` on SessionStart and PreCompact via built-in hooks — agents no longer need to call it manually. If context is lost mid-execution, the beads plugin will re-prime automatically on the next session or compaction event. For explicit recovery, run `bd prime --work-type recovery` to reload the approved plan, completed work, and current position from disk.
-
-## External Tools (Optional)
-
-If external AI tools are configured (`.metaswarm/external-tools.yaml`), the orchestrator
-can delegate implementation and review tasks to Codex CLI and Gemini CLI for cost savings
-and cross-model adversarial review. See `templates/external-tools-setup.md` for setup.
-
-## Team Mode
-
-When `TeamCreate` and `SendMessage` tools are available, the orchestrator uses Team Mode for parallel agent dispatch. Otherwise it falls back to Task Mode (the existing workflow, unchanged). See `guides/agent-coordination.md` for details.
-
-## Guides
-
-Development patterns and standards are documented in `guides/`:
-- `agent-coordination.md` — Team Mode vs Task Mode, agent dispatch patterns
-- `build-validation.md` — Build and validation workflow
-- `coding-standards.md` — Code style and conventions
-- `git-workflow.md` — Branching, commits, and PR conventions
-- `testing-patterns.md` — TDD patterns and coverage enforcement
-- `worktree-development.md` — Git worktree-based parallel development
-
-## Code Quality
-
-- Go 1.26, module `vtiger-asterisk-connector`
-- `gofmt -l .` must return nothing (formatting is not negotiable)
-- `go vet ./...` must be clean
-- `golangci-lint run` must be clean (config: `.golangci.yml`)
-- Errors are wrapped with `%w` and never silently discarded — see `.agents/skills/golang-error-handling/SKILL.md`
-- All quality gates must pass before PR creation
-
-## Key Decisions
-
-<!-- Document important architectural decisions here so agents have context.
-     These get loaded during knowledge priming (/prime).
-     Use `bd decision` to record decisions persistently in the beads database
-     with rationale tracking — these survive compaction and are available across sessions. -->
-
-## Notes
-
-<!-- Add project-specific notes, conventions, or constraints here.
-     Examples: "Always use server components for data fetching",
-     "The payments module is legacy — do not refactor without approval" -->
+`gofmt -l .` must print nothing. `.golangci.yml` is the linter source of truth;
+`.coverage-thresholds.json` is the coverage source of truth. Run integration,
+contract, vulnerability, and deployment checks when the change touches those
+areas. Never weaken a gate merely to make a change pass.
+
+## Definition of done
+
+A change is complete only when its behavior is specified, tests cover success
+and failure paths, all relevant gates pass, sensitive data is protected,
+operational impact and rollback are documented, and README/spec/config examples
+remain accurate.
